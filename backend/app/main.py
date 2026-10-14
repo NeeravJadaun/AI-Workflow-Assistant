@@ -149,6 +149,7 @@ def approve(proposal_id: int, edits: Edits | None = None, user: dict = Depends(a
         if p["status"] != "pending":
             raise HTTPException(409, f"Proposal is {p['status']}")
         final = {k: changes.get(k, p[k]) for k in ("urgency", "category", "title", "description")}
+        edited = sorted(k for k, v in final.items() if v != p[k])
         cur = conn.execute("UPDATE proposals SET status='approved', decided_by=?, decided_at=?, urgency=?, "
                            "category=?, title=?, description=? WHERE id=? AND status='pending'",
                            (user["username"], db.now(), *final.values(), proposal_id))
@@ -163,7 +164,7 @@ def approve(proposal_id: int, edits: Edits | None = None, user: dict = Depends(a
             raise HTTPException(409, "Work order already exists")
         conn.execute("UPDATE requests SET status='approved' WHERE id=?", (p["request_id"],))
         db.audit(conn, user["username"], "proposal_approved", p["request_id"], proposal_id,
-                 {"work_order_id": wo_id, "edited_fields": sorted(changes)})
+                 {"work_order_id": wo_id, "edited_fields": edited})
         log.info("proposal %s approved by %s -> work order %s", proposal_id, user["username"], wo_id)
         return {"work_order": dict(conn.execute("SELECT * FROM work_orders WHERE id=?", (wo_id,)).fetchone()),
                 "duplicate": False}
